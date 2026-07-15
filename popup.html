@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #14161a;
+      color: #f3f1ea;
+      margin: 0;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 15px;
+      margin: 0 0 2px;
+      font-weight: 700;
+    }
+    .sub {
+      font-size: 11px;
+      color: #8a8d94;
+      margin-bottom: 14px;
+    }
+    .stats {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .stat {
+      flex: 1;
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 8px;
+      text-align: center;
+    }
+    .stat b { display: block; font-size: 18px; color: #e0a45a; }
+    .stat span { font-size: 10px; color: #8a8d94; text-transform: uppercase; }
+
+    textarea, input {
+      width: 100%;
+      box-sizing: border-box;
+      background: #1e2126;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      color: #f3f1ea;
+      padding: 8px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 60px; }
+
+    button {
+      width: 100%;
+      background: #e0a45a;
+      color: #14161a;
+      border: none;
+      border-radius: 8px;
+      padding: 9px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      margin-bottom: 6px;
+    }
+    button.secondary {
+      background: #3a3d44;
+      color: #f3f1ea;
+    }
+
+    #abf-list {
+      max-height: 140px;
+      overflow-y: auto;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    .abf-item {
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .abf-item .box {
+      color: #8a8d94;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .abf-remove {
+      background: none;
+      border: none;
+      color: #8a8d94;
+      cursor: pointer;
+      width: auto;
+      padding: 0 4px;
+      margin: 0;
+    }
+    .abf-remove:hover { color: #e05a5a; }
+    label { font-size: 11px; color: #8a8d94; display: block; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <h1>POP</h1>
+  <div class="sub">Practice On Pause — pops up during YouTube ads.</div>
+
+  <div class="stats">
+    <div class="stat"><b id="abf-reviews">0</b><span>reviews</span></div>
+    <div class="stat"><b id="abf-accuracy">0%</b><span>accuracy</span></div>
+    <div class="stat"><b id="abf-count">0</b><span>cards</span></div>
+  </div>
+
+  <button class="secondary" id="abf-test-btn">Simulate ad break (test on this tab)</button>
+
+  <label>Add a card</label>
+  <input id="abf-front-input" placeholder="Front (question / term)" />
+  <input id="abf-back-input" placeholder="Back (answer / definition)" />
+  <button id="abf-add-btn">Add card</button>
+
+  <label>
+    Import from Quizlet: open your set → <b>...</b> menu → <b>Export</b> →
+    keep "Tab" between term/definition and "New line" between cards → copy →
+    paste below
+  </label>
+  <textarea id="abf-import" placeholder="Mitochondria	Powerhouse of the cell"></textarea>
+  <button class="secondary" id="abf-import-btn">Import lines</button>
+
+  <div id="abf-list"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+// POP (Practice On Pause) — content script
+// Detects YouTube in-stream ad playback and shows a flashcard overlay
+// on top of the player for the duration of the ad.
+
+const DEFAULT_DECK = [
+  { id: "d1", front: "Mitochondria", back: "The organelle that produces ATP (cellular respiration).", box: 1, lastSeen: 0 },
+  { id: "d2", front: "Newton's 2nd Law", back: "F = ma", box: 1, lastSeen: 0 },
+  { id: "d3", front: "Photosynthesis equation", back: "6CO2 + 6H2O + light → C6H12O6 + 6O2", box: 1, lastSeen: 0 },
+  { id: "d4", front: "Capital of Australia", back: "Canberra (not Sydney!)", box: 1, lastSeen: 0 },
+  { id: "d5", front: "Derivative of sin(x)", back: "cos(x)", box: 1, lastSeen: 0 },
+];
+
+let deck = [];
+let currentCard = null;
+let overlayEl = null;
+let playerEl = null;
+let observer = null;
+let adActive = false;
+
+// ---------- storage ----------
+
+async function loadDeck() {
+  const stored = await chrome.storage.local.get("deck");
+  if (stored.deck && Array.isArray(stored.deck) && stored.deck.length > 0) {
+    deck = stored.deck;
+  } else {
+    deck = DEFAULT_DECK;
+    await chrome.storage.local.set({ deck });
+  }
+}
+
+async function saveDeck() {
+  await chrome.storage.local.set({ deck });
+}
+
+async function bumpStats(correct) {
+  const stored = await chrome.storage.local.get("stats");
+  const stats = stored.stats || { reviews: 0, correct: 0 };
+  stats.reviews += 1;
+  if (correct) stats.correct += 1;
+  await chrome.storage.local.set({ stats });
+}
+
+// ---------- card selection (simple Leitner-style weighting) ----------
+
+function pickCard() {
+  if (deck.length === 0) return null;
+  // Weight lower boxes (less well-known cards) more heavily.
+  const weighted = [];
+  deck.forEach((card) => {
+    const weight = card.box >= 3 ? 1 : card.box === 2 ? 3 : 5;
+    for (let i = 0; i < weight; i++) weighted.push(card);
+  });
+  return weighted[Math.floor(Math.random() * weighted.length)];
+}
+
+function gradeCard(card, correct) {
+  if (correct) {
+    card.box = Math.min(3, card.box + 1);
+  } else {
+    card.box = 1;
+  }
+  card.lastSeen = Date.now();
+  saveDeck();
+  bumpStats(correct);
+}
+
+// ---------- overlay UI ----------
+
+function buildOverlay() {
+  const el = document.createElement("div");
+  el.id = "abf-overlay";
+  el.innerHTML = `
+    <div class="abf-card" id="abf-card">
+      <div class="abf-header">
+        <span class="abf-badge">POP · quick review</span>
+        <button class="abf-close" id="abf-close" title="Hide">×</button>
+      </div>
+      <div class="abf-front" id="abf-front"></div>
+      <div class="abf-back" id="abf-back" style="display:none;"></div>
+      <div class="abf-actions" id="abf-reveal-row">
+        <button class="abf-btn abf-btn-primary" id="abf-reveal">Reveal answer</button>
+      </div>
+      <div class="abf-actions" id="abf-grade-row" style="display:none;">
+        <button class="abf-btn abf-btn-miss" id="abf-miss">Missed it</button>
+        <button class="abf-btn abf-btn-hit" id="abf-hit">Got it</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(el);
+
+  el.querySelector("#abf-close").addEventListener("click", () => {
+    el.style.display = "none";
+  });
+  el.querySelector("#abf-reveal").addEventListener("click", revealAnswer);
+  el.querySelector("#abf-hit").addEventListener("click", () => handleGrade(true));
+  el.querySelector("#abf-miss").addEventListener("click", () => handleGrade(false));
+
+  return el;
+}
+
+function showNewCard() {
+  currentCard = pickCard();
+  if (!currentCard) return;
+  overlayEl.querySelector("#abf-front").textContent = currentCard.front;
+  overlayEl.querySelector("#abf-back").textContent = currentCard.back;
+  overlayEl.querySelector("#abf-back").style.display = "none";
+  overlayEl.querySelector("#abf-reveal-row").style.display = "flex";
+  overlayEl.querySelector("#abf-grade-row").style.display = "none";
+  overlayEl.style.display = "block";
+}
+
+function revealAnswer() {
+  overlayEl.querySelector("#abf-back").style.display = "block";
+  overlayEl.querySelector("#abf-reveal-row").style.display = "none";
+  overlayEl.querySelector("#abf-grade-row").style.display = "flex";
+}
+
+function handleGrade(correct) {
+  if (currentCard) gradeCard(currentCard, correct);
+  if (adActive) {
+    showNewCard(); // keep practicing if the ad is still running
+  } else {
+    overlayEl.style.display = "none";
+  }
+}
+
+function hideOverlay() {
+  if (overlayEl) overlayEl.style.display = "none";
+}
+
+// ---------- ad detection ----------
+
+function isAdShowing(player) {
+  if (!player) return false;
+  const cls = player.className || "";
+  return cls.includes("ad-showing") || cls.includes("ad-interrupting");
+}
+
+function onAdStateChange(showing) {
+  if (showing === adActive) return;
+  adActive = showing;
+  if (showing) {
+    if (!overlayEl) overlayEl = buildOverlay();
+    showNewCard();
+  } else {
+    hideOverlay();
+  }
+}
+
+function attachObserver(player) {
+  if (observer) observer.disconnect();
+  observer = new MutationObserver(() => {
+    onAdStateChange(isAdShowing(player));
+  });
+  observer.observe(player, { attributes: true, attributeFilter: ["class"] });
+  // check immediate state too
+  onAdStateChange(isAdShowing(player));
+}
+
+function findPlayerAndAttach() {
+  const player = document.getElementById("movie_player");
+  if (player && player !== playerEl) {
+    playerEl = player;
+    attachObserver(player);
+  }
+}
+
+function init() {
+  loadDeck().then(() => {
+    findPlayerAndAttach();
+    // Player may not exist yet on first load; poll briefly until it appears.
+    const poll = setInterval(() => {
+      if (document.getElementById("movie_player")) {
+        findPlayerAndAttach();
+        clearInterval(poll);
+      }
+    }, 500);
+  });
+}
+
+// Manual test trigger from the popup (useful when no real ad is available).
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === "abf-simulate-ad") {
+    loadDeck().then(() => {
+      if (!overlayEl) overlayEl = buildOverlay();
+      adActive = true;
+      showNewCard();
+      // auto-hide after 15s like a short ad, unless a real ad state overrides it
+      setTimeout(() => {
+        if (adActive) onAdStateChange(false);
+      }, 15000);
+    });
+    sendResponse({ ok: true });
+  }
+  return true;
+});
+
+// YouTube is a single-page app; re-check the player on navigation.
+document.addEventListener("yt-navigate-finish", () => {
+  playerEl = null;
+  setTimeout(findPlayerAndAttach, 500);
+});
+
+init();
