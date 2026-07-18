@@ -8,7 +8,10 @@ async function setDeck(deck) {
 }
 
 function isoDate(d) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function daysBetween(isoA, isoB) {
@@ -35,9 +38,9 @@ function displayStreak(stats) {
   if (!streak.lastDate) return { count: 0, atRisk: false };
   const today = isoDate(new Date());
   const diff = daysBetween(streak.lastDate, today);
-  if (diff === 0) return { count: streak.count, atRisk: false };
-  if (diff === 1) return { count: streak.count, atRisk: true }; // one-day warning
-  return { count: 0, atRisk: false }; // streak broken
+  if (diff <= 0) return { count: streak.count, atRisk: false };  // was: === 0
+  if (diff === 1) return { count: streak.count, atRisk: true };
+  return { count: 0, atRisk: false };
 }
 
 async function refreshStats() {
@@ -143,6 +146,20 @@ document.getElementById("abf-import-btn").addEventListener("click", async () => 
   refreshList();
   if (added === 0) {
     alert("Couldn't find any term/definition pairs. Make sure each line has a tab, comma, or dash between the two.");
+  }
+});
+
+document.getElementById("abf-simulate-btn").addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab || !/^https:\/\/www\.youtube\.com\//.test(tab.url || "")) {
+    alert("Open a YouTube tab first, then try again.");
+    return;
+  }
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: "abf-simulate-ad" });
+    window.close(); 
+  } catch {
+    alert("Couldn't reach the page. Reload the YouTube tab and try again.");
   }
 });
 
