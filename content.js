@@ -214,21 +214,20 @@ function init() {
 }
 
 // Manual test trigger from the popup (useful when no real ad is available).
+let simulateTimer = null;
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg && msg.type === "abf-simulate-ad") {
-    loadDeck().then(() => {
-      if (!overlayEl) overlayEl = buildOverlay();
-      adActive = true;
-      adBreakCountedThisSession = false;
-      showNewCard();
-      // auto-hide after 15s like a short ad, unless a real ad state overrides it
-      setTimeout(() => {
-        if (adActive) onAdStateChange(false);
-      }, 15000);
-    });
+  if (!msg || msg.type !== "abf-simulate-ad") return; // not for us
+  loadDeck().then(() => {
+    clearTimeout(simulateTimer);
+    onAdStateChange(true); // go through the normal "ad started" path
+    simulateTimer = setTimeout(() => {
+      // Only end the fake ad if a real one hasn't taken over meanwhile.
+      if (!isAdShowing(playerEl)) onAdStateChange(false);
+    }, 15000);
     sendResponse({ ok: true });
-  }
-  return true;
+  });
+  return true; // keeps the reply channel open for the async sendResponse above
 });
 
 // YouTube is a single-page app; re-check the player on navigation.
